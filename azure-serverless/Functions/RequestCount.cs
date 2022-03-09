@@ -6,6 +6,9 @@ using Microsoft.Azure.WebJobs.Extensions.Http;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Logging;
 using Microsoft.Azure.Cosmos;
+using AzFunction_Serverless.Model.Cosmos;
+using Microsoft.Azure.Cosmos.Table;
+using AzFunction_Serverless.Model.Storage;
 
 namespace AzFunction_Serverless
 {
@@ -20,6 +23,8 @@ namespace AzFunction_Serverless
         private static string databaseName;
 
         private static string collectionName;
+
+        private static string storageConnectionString;
         
         [FunctionName("RequestCount")]
         public static async Task<IActionResult> Run( [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req, ILogger log) 
@@ -31,15 +36,41 @@ namespace AzFunction_Serverless
              */
 
             log.LogInformation("C# HTTP trigger function processed a request.");
-            cosmosUrl = Environment.GetEnvironmentVariable("CosmosUrl");
-            cosmosKey = Environment.GetEnvironmentVariable("CosmosKey");
-            databaseName = Environment.GetEnvironmentVariable("DatabaseName");
-            collectionName = Environment.GetEnvironmentVariable("CollectionName");
+            Initialization();
+            
+            //Storage Table - Crud ops method.
+            string storageCount = GetCountFromStorage();
             
             string val = await GetCount();
             int count = Int32.Parse(val) + 1;
             await UpdateCountAsync(count);
             return new OkObjectResult(count.ToString());
+        }
+
+        public static void Initialization()
+        {
+            cosmosUrl = Environment.GetEnvironmentVariable("CosmosUrl");
+            cosmosKey = Environment.GetEnvironmentVariable("CosmosKey");
+            databaseName = Environment.GetEnvironmentVariable("DatabaseName");
+            collectionName = Environment.GetEnvironmentVariable("CollectionName");
+            storageConnectionString = Environment.GetEnvironmentVariable("StorageConnectionString");
+        }
+
+        private static string GetCountFromStorage()
+        {
+            var tableName = "CountTable";
+            CloudStorageAccount storageAccount = CloudStorageAccount.Parse(storageConnectionString);
+            CloudTableClient tableClient = storageAccount.CreateCloudTableClient(new TableClientConfiguration());
+            CloudTable table = tableClient.GetTableReference(tableName);
+            return QueryStorage(table);            
+        }
+
+        public static string QueryStorage(CloudTable table)
+        {
+            TableQuery<CountEntity> query = new TableQuery<CountEntity>();
+            foreach (CountEntity entity in table.ExecuteQuery(query))
+                return entity.Count;
+            return 0.ToString();
         }
 
         public static CosmosClient GetCosmosClient()
@@ -84,15 +115,6 @@ namespace AzFunction_Serverless
             Count insertItem = new Count(count.ToString());            
             await container.CreateItemAsync<Count>(insertItem, new PartitionKey(insertItem.id));
             return;
-        }
-    }
-
-    public class Count
-    {
-        public string id { get; set; }
-        public Count(string id)
-        {
-            this.id = id;
         }
     }
 
