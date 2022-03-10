@@ -9,6 +9,8 @@ using Microsoft.Azure.Cosmos;
 using AzFunction_Serverless.Model.Cosmos;
 using Microsoft.Azure.Cosmos.Table;
 using AzFunction_Serverless.Model.Storage;
+using Azure.Security.KeyVault.Secrets;
+using Azure.Identity;
 
 namespace AzFunction_Serverless
 {
@@ -50,10 +52,10 @@ namespace AzFunction_Serverless
         public static void Initialization()
         {
             cosmosUrl = Environment.GetEnvironmentVariable("CosmosUrl");
-            cosmosKey = Environment.GetEnvironmentVariable("CosmosKey");
+            cosmosKey = GetSecretFromKey(Environment.GetEnvironmentVariable("CosmosKey"));
             databaseName = Environment.GetEnvironmentVariable("DatabaseName");
             collectionName = Environment.GetEnvironmentVariable("CollectionName");
-            storageConnectionString = Environment.GetEnvironmentVariable("StorageConnectionString");
+            storageConnectionString = GetSecretFromKey(Environment.GetEnvironmentVariable("StorageConnectionString"));
         }
 
         private static string GetCountFromStorage()
@@ -116,6 +118,33 @@ namespace AzFunction_Serverless
             await container.CreateItemAsync<Count>(insertItem, new PartitionKey(insertItem.id));
             return;
         }
+
+
+        // KeyVault connection. Make sure you're logged in with the account you've granted access to on kv.
+        public static string GetSecretFromKey(string key)
+        {
+            try 
+            {
+                string keyVaultName = Environment.GetEnvironmentVariable("KEY_VAULT_NAME");
+                var kvUri = "https://" + keyVaultName + ".vault.azure.net";
+                SecretClient secretClient = GetSecretClient(kvUri);
+                KeyVaultSecret secret = secretClient.GetSecretAsync(key, null).Result;
+                return secret.Value;
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return null;
+            }
+        }
+
+        public static SecretClient GetSecretClient(string KVUrl)
+        {
+            DefaultAzureCredential credentials = new DefaultAzureCredential();
+            SecretClient secretClient = new SecretClient(new Uri(KVUrl), credentials);
+            return secretClient;
+        }
+
     }
 
 }
