@@ -11,6 +11,8 @@ using Microsoft.Azure.Cosmos.Table;
 using AzFunction_Serverless.Model.Storage;
 using Azure.Security.KeyVault.Secrets;
 using Azure.Identity;
+using Microsoft.Azure.Services.AppAuthentication;
+using Microsoft.Azure.KeyVault;
 
 namespace AzFunction_Serverless
 {
@@ -120,22 +122,42 @@ namespace AzFunction_Serverless
         }
 
 
-        // KeyVault connection. Make sure you're logged in with the account you've granted access to on kv.
         public static string GetSecretFromKey(string key)
         {
-            try 
+            /**
+             * KeyVault connection. Make sure you're logged in to the account you've granted access to on kv.
+             * The user needs to have access provisioned on kv. 
+             * When deployed on portal, any compute service should have managed identity enabled.
+             * The identity of the Az service using the kv should have access policy added.             
+             */
+
+            try
             {
                 string keyVaultName = Environment.GetEnvironmentVariable("KEY_VAULT_NAME");
                 var kvUri = "https://" + keyVaultName + ".vault.azure.net";
-                SecretClient secretClient = GetSecretClient(kvUri);
-                KeyVaultSecret secret = secretClient.GetSecretAsync(key, null).Result;
+                KeyVaultClient keyVaultClient = GetKeyVaultClient(kvUri);
+                var secret = keyVaultClient.GetSecretAsync(kvUri, key).Result;
                 return secret.Value;
+
+                /**
+                 * Research why this dint work. Difference between both these libraries.
+                 * SecretClient secretClient = GetSecretClient(kvUri);
+                 * KeyVaultSecret secret = secretClient.GetSecretAsync(key, null).Result;
+                 * return secret.Value;
+                 */
             }
             catch(Exception ex)
             {
                 Console.WriteLine(ex.Message);
                 return null;
             }
+        }
+
+        public static KeyVaultClient GetKeyVaultClient(string KVUrl)
+        {
+            var azureServiceTokenProvider = new AzureServiceTokenProvider();
+            var keyVaultClient = new KeyVaultClient(new KeyVaultClient.AuthenticationCallback(azureServiceTokenProvider.KeyVaultTokenCallback));
+            return keyVaultClient;
         }
 
         public static SecretClient GetSecretClient(string KVUrl)
