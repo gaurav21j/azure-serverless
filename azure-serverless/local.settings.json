@@ -8,6 +8,8 @@
     "DatabaseName": "WebRequestDB",
     "CollectionName": "Count",
     "KEY_VAULT_NAME": "azserverblogresources",
-    "StorageConnectionString": "StorageConnectionString"
+    "StorageConnectionString": "StorageConnectionString",
+    "QueueName": "blogs",
+    "ServiceBusConnectionString": ""
   }
 }

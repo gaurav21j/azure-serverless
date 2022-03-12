@@ -13,10 +13,14 @@ using Azure.Security.KeyVault.Secrets;
 using Azure.Identity;
 using Microsoft.Azure.Services.AppAuthentication;
 using Microsoft.Azure.KeyVault;
+using Azure.Messaging.ServiceBus;
+using Newtonsoft.Json;
+using System.Text;
+using Microsoft.Azure.ServiceBus;
 
 namespace AzFunction_Serverless
 {
-    public class RequestCount
+    public class HttpRequestCount
     {
         private static CosmosClient client;
 
@@ -29,8 +33,12 @@ namespace AzFunction_Serverless
         private static string collectionName;
 
         private static string storageConnectionString;
+
+        private static string serviceBusConnectionString;
+
+        private static string queueName;
         
-        [FunctionName("RequestCount")]
+        [FunctionName("HttpRequestCount")]
         public static async Task<IActionResult> Run( [HttpTrigger(AuthorizationLevel.Function, "get", "post", Route = null)] HttpRequest req, ILogger log) 
         {
             /**
@@ -44,11 +52,16 @@ namespace AzFunction_Serverless
             
             //Storage Table - Crud ops method.
             string storageCount = GetCountFromStorage();
-            
-            string val = await GetCount();
-            int count = Int32.Parse(val) + 1;
-            await UpdateCountAsync(count);
-            return new OkObjectResult(count.ToString());
+
+            //Sending message on servicebus.
+            await SendMessageOnQueue(storageCount);
+
+            //string val = await GetCount();
+            //int count = Int32.Parse(val) + 1;
+            //await UpdateCountAsync(count);
+            //return new OkObjectResult(count.ToString());
+
+            return new OkObjectResult(storageCount);
         }
 
         public static void Initialization()
@@ -58,6 +71,8 @@ namespace AzFunction_Serverless
             databaseName = Environment.GetEnvironmentVariable("DatabaseName");
             collectionName = Environment.GetEnvironmentVariable("CollectionName");
             storageConnectionString = GetSecretFromKey(Environment.GetEnvironmentVariable("StorageConnectionString"));
+            serviceBusConnectionString = Environment.GetEnvironmentVariable("ServiceBusConnectionString");
+            queueName = Environment.GetEnvironmentVariable("QueueName");
         }
 
         private static string GetCountFromStorage()
@@ -165,6 +180,21 @@ namespace AzFunction_Serverless
             DefaultAzureCredential credentials = new DefaultAzureCredential();
             SecretClient secretClient = new SecretClient(new Uri(KVUrl), credentials);
             return secretClient;
+        }
+
+        public async static Task SendMessageOnQueue(string count)
+        {
+            try
+            {
+                string MessageBody = JsonConvert.SerializeObject(new Count(count));
+                QueueClient client = new QueueClient(serviceBusConnectionString, queueName);
+                Message Message = new Message(Encoding.UTF8.GetBytes(MessageBody));
+                await client.SendAsync(Message);
+            }
+            catch(Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }            
         }
 
     }
